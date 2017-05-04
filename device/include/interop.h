@@ -153,6 +153,9 @@ typedef enum {
   //Few carkit hfp version is hfp1.5 but it support hfp indicator, violate spec
   //remove hfp indicator for such device
   INTEROP_DISABLE_HF_INDICATOR,
+  // Some Carkits being AVRCP v1.3 upon receiving Play Application Setting Command Response
+  // and notification, doesn't send Passthrough commands back to DUT in Streaming State
+  INTEROP_DISABLE_PLAYER_APPLICATION_SETTING_CMDS,
 
   END_OF_INTEROP_LIST
 
