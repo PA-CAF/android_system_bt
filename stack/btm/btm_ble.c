@@ -71,7 +71,7 @@ extern void gatt_notify_enc_cmpl(BD_ADDR bd_addr);
 ** Returns          TRUE if added OK, else FALSE
 **
 *******************************************************************************/
-BOOLEAN BTM_SecAddBleDevice (BD_ADDR bd_addr, BD_NAME bd_name, tBT_DEVICE_TYPE dev_type,
+BOOLEAN BTM_SecAddBleDevice (const BD_ADDR bd_addr, BD_NAME bd_name, tBT_DEVICE_TYPE dev_type,
                              tBLE_ADDR_TYPE addr_type)
 {
     BTM_TRACE_DEBUG ("%s: dev_type=0x%x", __func__, dev_type);
@@ -485,16 +485,56 @@ void BTM_BleOobDataReply(BD_ADDR bd_addr, UINT8 res, UINT8 len, UINT8 *p_data)
     tSMP_STATUS res_smp = (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_OOB_FAIL;
     tBTM_SEC_DEV_REC  *p_dev_rec = btm_find_dev (bd_addr);
 
-    BTM_TRACE_DEBUG ("BTM_BleOobDataReply");
+    BTM_TRACE_DEBUG ("%s:", __func__);
 
-    if (p_dev_rec == NULL)
-    {
-        BTM_TRACE_ERROR("BTM_BleOobDataReply() to Unknown device");
+    if (p_dev_rec == NULL) {
+        BTM_TRACE_ERROR("%s: Unknown device", __func__);
         return;
     }
 
     p_dev_rec->sec_flags |= BTM_SEC_LE_AUTHENTICATED;
     SMP_OobDataReply(bd_addr, res_smp, len, p_data);
+#endif
+}
+
+/*******************************************************************************
+**
+** Function         BTM_BleSecureConnectionOobDataReply
+**
+** Description      This function is called to provide the OOB data for
+**                  SMP in response to BTM_LE_OOB_REQ_EVT when secure connection
+**                  data is available
+**
+** Parameters:      bd_addr     - Address of the peer device
+**                  p_c         - pointer to Confirmation.
+**                  p_r         - pointer to Randomizer
+**
+*******************************************************************************/
+void BTM_BleSecureConnectionOobDataReply(BD_ADDR bd_addr,
+                                         uint8_t *p_c, uint8_t *p_r)
+{
+#if SMP_INCLUDED == TRUE
+    tBTM_SEC_DEV_REC  *p_dev_rec = btm_find_dev (bd_addr);
+
+    BTM_TRACE_DEBUG ("%s:", __func__);
+
+    if (p_dev_rec == NULL) {
+        BTM_TRACE_ERROR("%s: Unknown device", __func__);
+        return;
+    }
+
+    p_dev_rec->sec_flags |= BTM_SEC_LE_AUTHENTICATED;
+
+    tSMP_SC_OOB_DATA oob;
+    memset(&oob, 0, sizeof(tSMP_SC_OOB_DATA));
+
+    oob.peer_oob_data.present = true;
+    memcpy(&oob.peer_oob_data.randomizer, p_r, BT_OCTET16_LEN);
+    memcpy(&oob.peer_oob_data.commitment, p_c, BT_OCTET16_LEN);
+    oob.peer_oob_data.addr_rcvd_from.type = p_dev_rec->ble.ble_addr_type;
+    memcpy(&oob.peer_oob_data.addr_rcvd_from.bda, bd_addr, sizeof(BD_ADDR));
+
+    SMP_SecureConnectionOobDataReply((uint8_t*)&oob);
 #endif
 }
 
@@ -747,6 +787,31 @@ void BTM_BleReceiverTest(UINT8 rx_freq, tBTM_CMPL_CB *p_cmd_cmpl_cback)
 
 /*******************************************************************************
 **
+** Function         BTM_BleEnhReceiverTest
+**
+** Description      This function is called to start the LE Enhanced Receiver
+**                  test
+**
+** Parameter        rx_freq - Frequency Range
+**                  phy - Phy to be used
+**                  mod_index - Modulation index
+**                  p_cmd_cmpl_cback - Command Complete callback
+**
+*******************************************************************************/
+void BTM_BleEnhReceiverTest(UINT8 rx_freq, UINT8 phy, UINT8 mod_index,
+                              tBTM_CMPL_CB *p_cmd_cmpl_cback)
+{
+     btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
+
+     if (btsnd_hcic_ble_enh_receiver_test(rx_freq, phy, mod_index) == FALSE)
+     {
+          BTM_TRACE_ERROR("%s: Unable to Trigger LE Enhanced receiver test",
+                               __FUNCTION__);
+     }
+}
+
+/*******************************************************************************
+**
 ** Function         BTM_BleTransmitterTest
 **
 ** Description      This function is called to start the LE Transmitter test
@@ -764,6 +829,32 @@ void BTM_BleTransmitterTest(UINT8 tx_freq, UINT8 test_data_len,
      if (btsnd_hcic_ble_transmitter_test(tx_freq, test_data_len, packet_payload) == FALSE)
      {
           BTM_TRACE_ERROR("%s: Unable to Trigger LE transmitter test", __FUNCTION__);
+     }
+}
+
+/*******************************************************************************
+**
+** Function         BTM_BleEnhTransmitterTest
+**
+** Description      This function is called to start the LE Enhanced Transmitter test
+**
+** Parameter        tx_freq - Frequency Range
+**                  test_data_len - Length in bytes of payload data in each packet
+**                  packet_payload - Pattern to use in the payload
+**                  phy - Phy to be used
+**                  p_cmd_cmpl_cback - Command Complete callback
+**
+*******************************************************************************/
+void BTM_BleEnhTransmitterTest(UINT8 tx_freq, UINT8 test_data_len,
+                                 UINT8 packet_payload, UINT8 phy,
+                                 tBTM_CMPL_CB *p_cmd_cmpl_cback)
+{
+     btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
+     if (btsnd_hcic_ble_enh_transmitter_test(tx_freq, test_data_len,
+              packet_payload, phy) == FALSE)
+     {
+          BTM_TRACE_ERROR("%s: Unable to Trigger LE Enhanced transmitter test",
+                               __FUNCTION__);
      }
 }
 
@@ -2158,7 +2249,7 @@ UINT8 btm_proc_smp_cback(tSMP_EVT event, BD_ADDR bd_addr, tSMP_EVT_DATA *p_data)
                    (*btm_cb.api.p_le_callback) (event, bd_addr, (tBTM_LE_EVT_DATA *)p_data);
                 }
 
-                if (event == SMP_COMPLT_EVT)
+                if (event == SMP_COMPLT_EVT && !p_data->cmplt.smp_over_br)
                 {
                     BTM_TRACE_DEBUG ("evt=SMP_COMPLT_EVT before update sec_level=0x%x sec_flags=0x%x", p_data->cmplt.sec_level , p_dev_rec->sec_flags );
 

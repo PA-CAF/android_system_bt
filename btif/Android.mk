@@ -36,6 +36,7 @@ btifCommonSrc += \
   src/btif_debug.c \
   src/btif_debug_btsnoop.c \
   src/btif_debug_conn.c \
+  src/btif_debug_l2c.c \
   src/btif_dm.c \
   src/btif_gatt.c \
   src/btif_gatt_client.c \
@@ -117,15 +118,16 @@ btifCommonIncludes := \
   $(bluetooth_C_INCLUDES) \
   external/tinyxml2 \
   external/zlib \
-  vendor/qcom/opensource/bluetooth/system_bt_ext \
   $(call include-path-for, audio-utils)
 
 ifneq ($(TARGET_SUPPORTS_WEARABLES),true)
 btifCommonIncludes += \
-   vendor/qcom/opensource/bluetooth/hal/include
+   vendor/qcom/opensource/bluetooth/hal/include \
+   vendor/qcom/opensource/bluetooth/system_bt_ext
 else
 btifCommonIncludes += \
-   device/qcom/msm8909w/opensource/bluetooth/hal/include
+   device/qcom/msm8909w/opensource/bluetooth/hal/include \
+   device/qcom/msm8909w/opensource/bluetooth/system_bt_ext
 endif
 
 # libbtif static library for target

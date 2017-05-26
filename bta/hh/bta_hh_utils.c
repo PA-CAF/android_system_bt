@@ -51,6 +51,7 @@ static const UINT8 bta_hh_mod_key_mask[BTA_HH_MOD_MAX_KEY] =
     BTA_HH_KB_GUI_MASK
 };
 
+
 /*******************************************************************************
 **      Function       blacklist_adjust_sniff_subrate
 **

@@ -27,7 +27,7 @@
  *  BTIF.
  *
  ******************************************************************************/
-
+#include <cutils/properties.h>
 #include "string.h"
 #include "a2d_api.h"
 #include "a2d_sbc.h"
@@ -204,14 +204,14 @@ const tA2D_APTX_HD_CIE btif_av_aptx_hd_default_config =
 #if defined(AAC_ENCODER_INCLUDED) && (AAC_ENCODER_INCLUDED == TRUE)
 const tA2D_AAC_CIE bta_av_co_aac_caps =
 {
-    (A2D_AAC_IE_OBJ_TYPE_MPEG_2_AAC_LC|A2D_AAC_IE_OBJ_TYPE_MPEG_4_AAC_LC), /* obj type */
+    (A2D_AAC_IE_OBJ_TYPE_MPEG_2_AAC_LC), /* obj type */
 #ifndef BTA_AV_SPLIT_A2DP_DEF_FREQ_48KHZ
     (A2D_AAC_IE_SAMP_FREQ_44100),
 #else
     (A2D_AAC_IE_SAMP_FREQ_48000),
 #endif
     (A2D_AAC_IE_CHANNELS_1 | A2D_AAC_IE_CHANNELS_2 ), /* channels  */
-    A2D_AAC_IE_BIT_RATE, /* BIT RATE */
+    BTIF_AAC_DEFAULT_BIT_RATE,      /* bit rate */
     A2D_AAC_IE_VBR_NOT_SUPP  /* variable bit rate */
 };
 
@@ -1083,8 +1083,15 @@ void bta_av_co_audio_setconfig(tBTA_AV_HNDL hndl, tBTA_AV_CODEC codec_type,
 #if defined(AAC_ENCODER_INCLUDED) && (AAC_ENCODER_INCLUDED == TRUE)
             case BTA_AV_CODEC_M24:
             {
+                tA2D_AAC_CIE p_aac_cie;
+                A2D_ParsAacInfo(&p_aac_cie, p_codec_info, FALSE);
+                APPL_TRACE_ERROR("%s p_aac_cie->bitrate = %x",__func__, p_aac_cie.bit_rate);
                 if ((codec_type != BTA_AV_CODEC_M24) ||
                         memcmp(p_codec_info, bta_av_co_cb.codec_cfg_aac.info, 5))
+                {
+                    recfg_needed = TRUE;
+                }
+                else if (p_aac_cie.bit_rate == 0 || p_aac_cie.bit_rate < BTIF_AAC_MIN_BITRATE)
                 {
                     recfg_needed = TRUE;
                 }
@@ -1398,14 +1405,16 @@ static BOOLEAN bta_av_co_audio_codec_build_config(const UINT8 *p_codec_caps, UIN
         A2D_ParsAacInfo (&peer_aac_cfg ,(UINT8*)p_codec_caps, FALSE);
         A2D_ParsAacInfo (&aac_cfg_selected ,bta_av_co_cb.codec_cfg->info, FALSE);
 
-        aac_cfg_selected.bit_rate =
-                        BTA_AV_CO_MIN(peer_aac_cfg.bit_rate,
-                                      aac_cfg_selected.bit_rate);
+        if (peer_aac_cfg.bit_rate != 0 && peer_aac_cfg.bit_rate >= BTIF_AAC_MIN_BITRATE)
+        {
+            aac_cfg_selected.bit_rate =
+                            BTA_AV_CO_MIN(peer_aac_cfg.bit_rate,
+                                          aac_cfg_selected.bit_rate);
+            //update with new value
+            A2D_BldAacInfo (AVDT_MEDIA_AUDIO, &aac_cfg_selected, bta_av_co_cb.codec_cfg->info);
+        }
         APPL_TRACE_EVENT("%s AAC bitrate selected %d", __func__,
                                       aac_cfg_selected.bit_rate);
-        //update with new value
-        A2D_BldAacInfo (AVDT_MEDIA_AUDIO, &aac_cfg_selected, bta_av_co_cb.codec_cfg->info);
-
         memcpy(p_codec_cfg, bta_av_co_cb.codec_cfg->info, A2D_AAC_INFO_LEN+1);
         APPL_TRACE_DEBUG("%s AAC", __func__);
         break;
@@ -1710,6 +1719,26 @@ static BOOLEAN bta_av_co_audio_sink_supports_cp(const tBTA_AV_CO_SINK *p_sink)
     }
 }
 
+BOOLEAN bta_av_co_audio_is_aac_enabled(bt_bdaddr_t *remote_bdaddr)
+{
+    int retval;
+    BOOLEAN res = FALSE;
+    char is_whitelist_by_default[255] = "false";
+    retval = property_get("persist.bt.a2dp.aac_whitelist", is_whitelist_by_default, "false");
+    BTIF_TRACE_DEBUG("%s: property_get: bt.a2dp.aac_whitelist: %s, retval: %d",
+                                    __func__, is_whitelist_by_default, retval);
+
+    if (!strncmp(is_whitelist_by_default, "true", 4)) {
+        if (interop_match_addr(INTEROP_ENABLE_AAC_CODEC, remote_bdaddr))
+            res = TRUE;
+    } else if (!interop_match_addr(INTEROP_DISABLE_AAC_CODEC, remote_bdaddr)) {
+            res = TRUE;
+    }
+
+    return res;
+}
+
+
 /*******************************************************************************
  **
  ** Function         bta_av_co_audio_peer_supports_codec
@@ -1829,7 +1858,7 @@ static BOOLEAN bta_av_co_audio_peer_supports_codec(tBTA_AV_CO_PEER *p_peer, UINT
 
 #if defined(AAC_ENCODER_INCLUDED) && (AAC_ENCODER_INCLUDED == TRUE)
     if (bt_split_a2dp_enabled && btif_av_is_codec_offload_supported(AAC) &&
-          !interop_match_addr(INTEROP_DISABLE_AAC_CODEC, &remote_bdaddr)) {
+          bta_av_co_audio_is_aac_enabled(&remote_bdaddr)) {
         for (index = 0; index < p_peer->num_sup_snks; index++)
         {
             APPL_TRACE_DEBUG("%s AAC: index: %d, codec_type: %d", __func__, index, p_peer->snks[index].codec_type);
