@@ -38,6 +38,8 @@
 #include "btif_a2dp_audio_interface.h"
 #include "btif_hf.h"
 
+#define BTIF_A2DP_START_BLOCK_SCO_CONNECTED 0x0D
+
 #ifdef ENABLE_SPLIT_A2DP
 extern bool btif_a2dp_audio_if_init;
 #endif // ENABLE_SPLIT_A2DP
@@ -207,7 +209,7 @@ void btif_a2dp_on_offload_started(tBTA_AV_STATUS status) {
       btif_av_get_peer_addr(&bd_addr);
      /* status 13 means that there is a sco connection request during start vs cmd
         in such case, will not disconnect the stack, this trigger connect again*/
-      if(status != 13) 
+      if (status != BTIF_A2DP_START_BLOCK_SCO_CONNECTED)
           btif_dispatch_sm_event(BTIF_AV_DISCONNECT_REQ_EVT, (void *)bd_addr.address,
                              sizeof(RawAddress));
     }
